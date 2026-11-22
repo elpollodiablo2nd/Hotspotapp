@@ -1,6 +1,7 @@
 package com.elpollodiablo.hotspotapp
 
 import android.Manifest
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -22,8 +23,7 @@ class PixelBridge(private val activity: MainActivity) {
             if (Build.VERSION.SDK_INT >= 31 &&
                 app.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
             ) return result.toString()
-            val manager = app.getSystemService(BluetoothManager::class.java) ?: return result.toString()
-            val adapter = manager.adapter ?: return result.toString()
+            val adapter = bluetoothAdapter() ?: return result.toString()
             for (device in adapter.bondedDevices) {
                 result.put(
                     JSONObject()
@@ -109,9 +109,16 @@ class PixelBridge(private val activity: MainActivity) {
         }
     }
 
+    private fun bluetoothAdapter(): BluetoothAdapter? = try {
+        val manager = app.getSystemService(BluetoothManager::class.java) ?: return null
+        manager.javaClass.getMethod("getAdapter").invoke(manager) as? BluetoothAdapter
+    } catch (e: Exception) {
+        Log.w(TAG, "getAdapter reflection failed", e)
+        null
+    }
+
     private fun isBluetoothEnabled(): Boolean = try {
-        val manager = app.getSystemService(BluetoothManager::class.java)
-        manager?.adapter?.isEnabled == true
+        bluetoothAdapter()?.isEnabled == true
     } catch (e: Exception) {
         false
     }

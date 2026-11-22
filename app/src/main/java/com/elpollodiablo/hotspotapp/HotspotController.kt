@@ -1,14 +1,11 @@
 package com.elpollodiablo.hotspotapp
 
 import android.content.Context
-import android.net.wifi.SoftApConfiguration
 import android.net.wifi.WifiConfiguration
 import android.net.wifi.WifiManager
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import java.util.concurrent.Executor
 
 object HotspotController {
     private const val TAG = "HotspotController"
@@ -29,8 +26,7 @@ object HotspotController {
         if (reservation != null) return true
         return try {
             val wm = wifiManager(context)
-            val method = wm.javaClass.getMethod("isWifiApEnabled")
-            method.invoke(wm) == true
+            wm.javaClass.getMethod("isWifiApEnabled").invoke(wm) == true
         } catch (e: Exception) {
             false
         }
@@ -43,7 +39,7 @@ object HotspotController {
         }
         lastError = null
         return try {
-            if (Build.VERSION.SDK_INT >= 30) startLocalOnly(context) else startLocalOnlyLegacy(context)
+            startLocalOnly(context)
             true
         } catch (e: Exception) {
             Log.w(TAG, "local-only hotspot failed, trying legacy AP toggle", e)
@@ -65,55 +61,20 @@ object HotspotController {
             Log.w(TAG, "closing reservation failed", e)
         }
         reservation = null
-        if (Build.VERSION.SDK_INT < 30) {
-            try {
-                val wm = wifiManager(context)
-                wm.javaClass.getMethod("cancelLocalOnlyHotspotRequest").invoke(wm)
-            } catch (e: Exception) {
-                Log.w(TAG, "cancelLocalOnlyHotspotRequest failed", e)
-            }
+        try {
+            val wm = wifiManager(context)
+            wm.javaClass.getMethod("cancelLocalOnlyHotspotRequest").invoke(wm)
+        } catch (e: Exception) {
+            Log.w(TAG, "cancelLocalOnlyHotspotRequest failed", e)
         }
         setApEnabledLegacy(context, false)
         AppState.hotspotOn = false
     }
 
+    @Suppress("DEPRECATION")
     private fun startLocalOnly(context: Context) {
         val wm = wifiManager(context)
-        val config = currentSoftApConfig(wm) ?: SoftApConfiguration.Builder().build()
-        val executor = Executor { command -> Handler(Looper.getMainLooper()).post(command) }
-        wm.startLocalOnlyHotspot(config, executor, callback)
-    }
-
-    private fun startLocalOnlyLegacy(context: Context) {
-        val wm = wifiManager(context)
-        val handler = Handler(Looper.getMainLooper())
-        val method = wm.javaClass.getMethod(
-            "startLocalOnlyHotspot",
-            WifiManager.LocalOnlyHotspotCallback::class.java,
-            Handler::class.java
-        )
-        method.invoke(wm, callback, handler)
-    }
-
-    private fun currentSoftApConfig(wm: WifiManager): SoftApConfiguration? {
-        if (Build.VERSION.SDK_INT < 30) return null
-        try {
-            val method = wm.javaClass.getMethod("getSoftApConfiguration")
-            return method.invoke(wm) as? SoftApConfiguration
-        } catch (e: Exception) {
-            Log.w(TAG, "getSoftApConfiguration reflection failed", e)
-        }
-        return try {
-            @Suppress("DEPRECATION")
-            val legacy = wm.wifiApConfiguration ?: return null
-            val builder = SoftApConfiguration.Builder()
-            legacy.SSID?.removeSurrounding("\"")?.let { builder.setSsid(it) }
-            legacy.preSharedKey?.removeSurrounding("\"")?.let { builder.setPassphrase(it) }
-            builder.build()
-        } catch (e: Exception) {
-            Log.w(TAG, "building SoftApConfiguration from legacy config failed", e)
-            null
-        }
+        wm.startLocalOnlyHotspot(callback, Handler(Looper.getMainLooper()))
     }
 
     private fun setApEnabledLegacy(context: Context, enable: Boolean): Boolean = try {
@@ -130,9 +91,29 @@ object HotspotController {
 
     private fun ssidOf(reservation: WifiManager.LocalOnlyHotspotReservation?): String? {
         if (reservation == null) return null
+        for (methodName in listOf("getSoftApConfiguration", "getWifiConfiguration")) {
+            try {
+                val conf = reservation.javaClass.getMethod(methodName).invoke(reservation) ?: continue
+                ssidOfConf(conf)?.let { return it }
+            } catch (e: Exception) {
+                Log.w(TAG, "$methodName reflection failed", e)
+            }
+        }
+        return null
+    }
+
+    private fun ssidOfConf(conf: Any): String? {
+        for (method in conf.javaClass.methods) {
+            if (method.name == "getSsid" || method.name == "getSSID") {
+                try {
+                    (method.invoke(conf) as? String)?.let { return it }
+                } catch (e: Exception) {
+                    Log.w(TAG, "ssid getter failed", e)
+                }
+            }
+        }
         return try {
-            val method = reservation.javaClass.getMethod("getSoftApConfiguration")
-            (method.invoke(reservation) as? SoftApConfiguration)?.ssid
+            conf.javaClass.getField("SSID").get(conf) as? String
         } catch (e: Exception) {
             null
         }
