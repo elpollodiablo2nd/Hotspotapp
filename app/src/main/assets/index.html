@@ -30,6 +30,7 @@
     .hint { font-size: 1.15rem; opacity: 0.75; word-break: break-word; }
     footer { margin-top: 1.25rem; text-align: center; font-size: 1.05rem; opacity: 0.6; }
     button.small { font-size: 0.55rem; padding: 0.8rem 1rem; }
+    #apSsid, #apPass { font-size: 1.3rem; flex: 1 1 130px; min-width: 0; }
     .stat-value.ok { color: var(--m-yellow); }
     .stat-value.bad { color: var(--m-red); }
 </style>
@@ -50,6 +51,7 @@
                 <div class="stat-item"><div class="stat-value" id="stBt">-</div><div class="stat-label">BT LINK</div></div>
                 <div class="stat-item"><div class="stat-value" id="stAp">-</div><div class="stat-label">HOTSPOT</div></div>
             </div>
+            <div class="stat-label" id="apLine">AP: -</div>
         </div>
 
         <div class="feedback" id="feedback"></div>
@@ -57,6 +59,12 @@
         <div class="row">
             <select id="deviceSelect" class="pixel"></select>
             <button id="saveBtn" class="btn-alt">SAVE</button>
+        </div>
+
+        <div class="row">
+            <input id="apSsid" class="pixel" placeholder="HOTSPOT NAME">
+            <input id="apPass" class="pixel" placeholder="PASSWORD">
+            <button id="apSaveBtn" class="btn-alt">SET AP</button>
         </div>
 
         <div class="row">
@@ -71,7 +79,7 @@
         <p class="hint" id="eventLine">...</p>
     </main>
 
-    <footer>HOTSPOT ON WHEN THE SAVED BLUETOOTH DEVICE CONNECTS - OFF WHEN IT DISCONNECTS</footer>
+    <footer>HOTSPOT ON WHEN THE SAVED BLUETOOTH DEVICE CONNECTS - OFF WHEN IT DISCONNECTS - AP NAME/PASS SHOWN IN THE SCREEN</footer>
 </div>
 
 <script>
@@ -127,6 +135,10 @@
         else if (s.deviceConnected && s.hotspotOn) expr.innerHTML = 'HOTSPOT ON<span class="cursor"></span>';
         else if (s.deviceConnected) expr.innerHTML = 'BT LINKED<span class="cursor"></span>';
         else expr.innerHTML = 'WAITING BT<span class="cursor"></span>';
+        var ap = $('apLine');
+        if (s.hotspotOn && s.ssid) ap.textContent = 'AP: ' + s.ssid + (s.passphrase ? '  PASS: ' + s.passphrase : '');
+        else if (s.apSsid) ap.textContent = 'AP CFG: ' + s.apSsid;
+        else ap.textContent = 'AP: -';
         var line = s.lastEvent || '';
         if (s.ssid) line += ' | SSID: ' + s.ssid;
         if (s.error) line += ' | ERR: ' + s.error;
@@ -164,7 +176,30 @@
 
     $('wifiBtn').addEventListener('click', function () { PixelBridge.openWifiPanel(); });
 
+    function prefillAp() {
+        var saved = null;
+        try { saved = JSON.parse(PixelBridge.savedApJson() || 'null'); } catch (e) { saved = null; }
+        if (saved && saved.ssid) {
+            $('apSsid').value = saved.ssid;
+            $('apPass').value = saved.passphrase || '';
+            return;
+        }
+        var sys = null;
+        try { sys = JSON.parse(PixelBridge.systemHotspotJson() || 'null'); } catch (e) { sys = null; }
+        if (sys && sys.ssid) {
+            $('apSsid').value = sys.ssid;
+            $('apPass').value = sys.passphrase || '';
+        }
+    }
+
+    $('apSaveBtn').addEventListener('click', function () {
+        PixelBridge.saveHotspotConfig($('apSsid').value, $('apPass').value);
+        feedback('AP SAVED', true);
+        window.refreshStatus();
+    });
+
     loadDevices();
+    prefillAp();
     window.refreshStatus();
     setInterval(window.refreshStatus, 1200);
 })();

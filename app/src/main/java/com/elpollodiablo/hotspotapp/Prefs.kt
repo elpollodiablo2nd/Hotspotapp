@@ -7,6 +7,8 @@ object Prefs {
     private const val KEY_TARGET_ADDRESS = "target_address"
     private const val KEY_TARGET_NAME = "target_name"
     private const val KEY_LISTENING = "listening"
+    private const val KEY_AP_SSID = "ap_ssid"
+    private const val KEY_AP_PASS = "ap_pass"
 
     private fun sp(context: Context) =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -29,5 +31,18 @@ object Prefs {
 
     fun setListening(context: Context, value: Boolean) {
         sp(context).edit().putBoolean(KEY_LISTENING, value).apply()
+    }
+
+    fun hotspotSsid(context: Context): String? =
+        sp(context).getString(KEY_AP_SSID, null)
+
+    fun hotspotPassphrase(context: Context): String? =
+        sp(context).getString(KEY_AP_PASS, null)
+
+    fun setHotspotConfig(context: Context, ssid: String, passphrase: String) {
+        sp(context).edit()
+            .putString(KEY_AP_SSID, ssid)
+            .putString(KEY_AP_PASS, passphrase)
+            .apply()
     }
 }

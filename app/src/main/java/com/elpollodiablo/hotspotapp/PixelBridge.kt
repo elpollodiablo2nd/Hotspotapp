@@ -52,6 +52,29 @@ class PixelBridge(private val activity: MainActivity) {
     }
 
     @JavascriptInterface
+    fun saveHotspotConfig(ssid: String, passphrase: String) {
+        Prefs.setHotspotConfig(app, ssid.trim(), passphrase)
+    }
+
+    @JavascriptInterface
+    fun savedApJson(): String {
+        val ssid = Prefs.hotspotSsid(app) ?: return "null"
+        return JSONObject()
+            .put("ssid", ssid)
+            .put("passphrase", Prefs.hotspotPassphrase(app) ?: "")
+            .toString()
+    }
+
+    @JavascriptInterface
+    fun systemHotspotJson(): String {
+        val config = HotspotController.systemHotspotConfig(app) ?: return "null"
+        return JSONObject()
+            .put("ssid", config.first)
+            .put("passphrase", config.second)
+            .toString()
+    }
+
+    @JavascriptInterface
     fun startListening() {
         Prefs.setListening(app, true)
         activity.runOnUiThread {
@@ -84,6 +107,9 @@ class PixelBridge(private val activity: MainActivity) {
         status.put("deviceConnected", AppState.deviceConnected)
         status.put("hotspotOn", AppState.hotspotOn || HotspotController.isOn(app))
         status.put("ssid", HotspotController.lastSsid ?: "")
+        status.put("passphrase", HotspotController.lastPassphrase ?: "")
+        status.put("apSsid", Prefs.hotspotSsid(app) ?: "")
+        status.put("apPass", Prefs.hotspotPassphrase(app) ?: "")
         status.put("btEnabled", isBluetoothEnabled())
         status.put("lastEvent", AppState.lastEvent)
         status.put("error", HotspotController.lastError ?: "")

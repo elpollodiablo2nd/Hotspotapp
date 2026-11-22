@@ -6,6 +6,7 @@ import android.net.wifi.WifiManager
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import java.util.concurrent.Executor
 
 object HotspotController {
     private const val TAG = "HotspotController"
@@ -15,6 +16,9 @@ object HotspotController {
 
     @Volatile
     var lastSsid: String? = null
+
+    @Volatile
+    var lastPassphrase: String? = null
 
     @Volatile
     var lastError: String? = null
@@ -38,8 +42,19 @@ object HotspotController {
             return true
         }
         lastError = null
+        val ssid = Prefs.hotspotSsid(context)
+        val passphrase = Prefs.hotspotPassphrase(context)
+        if (!ssid.isNullOrEmpty()) {
+            try {
+                startLocalOnlyWithConfig(context, ssid, passphrase ?: "")
+                return true
+            } catch (e: Exception) {
+                Log.w(TAG, "configured local-only hotspot failed, falling back to default", e)
+                lastError = "custom AP config failed: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
         return try {
-            startLocalOnly(context)
+            startLocalOnlyDefault(context)
             true
         } catch (e: Exception) {
             Log.w(TAG, "local-only hotspot failed, trying legacy AP toggle", e)
@@ -71,10 +86,43 @@ object HotspotController {
         AppState.hotspotOn = false
     }
 
+    fun systemHotspotConfig(context: Context): Pair<String, String>? {
+        return try {
+            val wm = wifiManager(context)
+            val conf = wm.javaClass.getMethod("getSoftApConfiguration").invoke(wm) ?: return null
+            val ssid = confString(conf, "getSsid", "SSID")
+            if (ssid.isNullOrEmpty()) return null
+            ssid to (confString(conf, "getPassphrase", "preSharedKey") ?: "")
+        } catch (e: Exception) {
+            Log.w(TAG, "reading system SoftApConfiguration failed", e)
+            null
+        }
+    }
+
     @Suppress("DEPRECATION")
-    private fun startLocalOnly(context: Context) {
+    private fun startLocalOnlyDefault(context: Context) {
         val wm = wifiManager(context)
         wm.startLocalOnlyHotspot(callback, Handler(Looper.getMainLooper()))
+    }
+
+    private fun startLocalOnlyWithConfig(context: Context, ssid: String, passphrase: String) {
+        val wm = wifiManager(context)
+        val configClass = Class.forName("android.net.wifi.SoftApConfiguration")
+        val builderClass = Class.forName("android.net.wifi.SoftApConfiguration\$Builder")
+        val builder = builderClass.getConstructor().newInstance()
+        builderClass.getMethod("setSsid", String::class.java).invoke(builder, ssid)
+        if (passphrase.length >= 8) {
+            builderClass.getMethod("setPassphrase", String::class.java).invoke(builder, passphrase)
+        }
+        val config = builderClass.getMethod("build").invoke(builder)
+        val executor = Executor { command -> Handler(Looper.getMainLooper()).post(command) }
+        val method = wm.javaClass.getMethod(
+            "startLocalOnlyHotspot",
+            configClass,
+            Executor::class.java,
+            WifiManager.LocalOnlyHotspotCallback::class.java
+        )
+        method.invoke(wm, config, executor, callback)
     }
 
     private fun setApEnabledLegacy(context: Context, enable: Boolean): Boolean = try {
@@ -89,31 +137,30 @@ object HotspotController {
         false
     }
 
-    private fun ssidOf(reservation: WifiManager.LocalOnlyHotspotReservation?): String? {
-        if (reservation == null) return null
+    private fun credsOf(reservation: WifiManager.LocalOnlyHotspotReservation?): Pair<String?, String?> {
+        if (reservation == null) return null to null
         for (methodName in listOf("getSoftApConfiguration", "getWifiConfiguration")) {
             try {
                 val conf = reservation.javaClass.getMethod(methodName).invoke(reservation) ?: continue
-                ssidOfConf(conf)?.let { return it }
+                return confString(conf, "getSsid", "SSID") to confString(conf, "getPassphrase", "preSharedKey")
             } catch (e: Exception) {
                 Log.w(TAG, "$methodName reflection failed", e)
             }
         }
-        return null
+        return null to null
     }
 
-    private fun ssidOfConf(conf: Any): String? {
-        for (method in conf.javaClass.methods) {
-            if (method.name == "getSsid" || method.name == "getSSID") {
-                try {
-                    (method.invoke(conf) as? String)?.let { return it }
-                } catch (e: Exception) {
-                    Log.w(TAG, "ssid getter failed", e)
-                }
+    private fun confString(conf: Any, getter: String, field: String): String? {
+        try {
+            val method = conf.javaClass.methods.firstOrNull { it.name == getter }
+            if (method != null) {
+                (method.invoke(conf) as? String)?.let { return it }
             }
+        } catch (e: Exception) {
+            Log.w(TAG, "getter $getter failed", e)
         }
         return try {
-            conf.javaClass.getField("SSID").get(conf) as? String
+            (conf.javaClass.getField(field).get(conf) as? String)?.removeSurrounding("\"")
         } catch (e: Exception) {
             null
         }
@@ -122,9 +169,11 @@ object HotspotController {
     private val callback = object : WifiManager.LocalOnlyHotspotCallback() {
         override fun onStarted(reservation: WifiManager.LocalOnlyHotspotReservation) {
             this@HotspotController.reservation = reservation
-            lastSsid = ssidOf(reservation)
+            val (ssid, passphrase) = credsOf(reservation)
+            lastSsid = ssid
+            lastPassphrase = passphrase
             AppState.hotspotOn = true
-            AppState.setEvent("hotspot ON" + (lastSsid?.let { " [$it]" } ?: ""))
+            AppState.setEvent("hotspot ON" + (ssid?.let { " [$it]" } ?: ""))
         }
 
         override fun onStopped() {
