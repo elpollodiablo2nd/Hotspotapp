@@ -137,7 +137,7 @@
         else expr.innerHTML = 'WAITING BT<span class="cursor"></span>';
         var ap = $('apLine');
         if (s.hotspotOn && s.ssid) ap.textContent = 'AP: ' + s.ssid + (s.passphrase ? '  PASS: ' + s.passphrase : '');
-        else if (s.apSsid) ap.textContent = 'AP CFG: ' + s.apSsid;
+        else if (s.apSsid) ap.textContent = 'AP CFG: ' + s.apSsid + (s.apPass ? '  PASS: ' + s.apPass : '');
         else ap.textContent = 'AP: -';
         var line = s.lastEvent || '';
         if (s.ssid) line += ' | SSID: ' + s.ssid;

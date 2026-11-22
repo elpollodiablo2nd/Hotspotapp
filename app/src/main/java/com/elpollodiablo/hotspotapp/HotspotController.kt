@@ -6,6 +6,7 @@ import android.net.wifi.WifiManager
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import java.security.SecureRandom
 import java.util.concurrent.Executor
 
 object HotspotController {
@@ -42,16 +43,13 @@ object HotspotController {
             return true
         }
         lastError = null
-        val ssid = Prefs.hotspotSsid(context)
-        val passphrase = Prefs.hotspotPassphrase(context)
-        if (!ssid.isNullOrEmpty()) {
-            try {
-                startLocalOnlyWithConfig(context, ssid, passphrase ?: "")
-                return true
-            } catch (e: Exception) {
-                Log.w(TAG, "configured local-only hotspot failed, falling back to default", e)
-                lastError = "custom AP config failed: ${e.message ?: e.javaClass.simpleName}"
-            }
+        val (ssid, passphrase) = ensureApConfig(context)
+        try {
+            startLocalOnlyWithConfig(context, ssid, passphrase)
+            return true
+        } catch (e: Exception) {
+            Log.w(TAG, "configured local-only hotspot failed, falling back to default", e)
+            lastError = "custom AP config failed: ${e.message ?: e.javaClass.simpleName}"
         }
         return try {
             startLocalOnlyDefault(context)
@@ -84,6 +82,23 @@ object HotspotController {
         }
         setApEnabledLegacy(context, false)
         AppState.hotspotOn = false
+    }
+
+    private fun ensureApConfig(context: Context): Pair<String, String> {
+        Prefs.hotspotSsid(context)?.let { saved ->
+            return saved to (Prefs.hotspotPassphrase(context) ?: "")
+        }
+        val generated = generateApConfig()
+        Prefs.setHotspotConfig(context, generated.first, generated.second)
+        return generated
+    }
+
+    private fun generateApConfig(): Pair<String, String> {
+        val random = SecureRandom()
+        val passChars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"
+        val passphrase = (1..12).map { passChars[random.nextInt(passChars.length)] }.joinToString("")
+        val suffix = (1..4).map { "0123456789ABCDEF"[random.nextInt(16)] }.joinToString("")
+        return "HotspotLink-$suffix" to passphrase
     }
 
     fun systemHotspotConfig(context: Context): Pair<String, String>? {
