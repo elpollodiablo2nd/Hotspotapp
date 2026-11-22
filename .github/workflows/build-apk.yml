@@ -28,8 +28,14 @@ jobs:
 
       - name: Install Android SDK components
         run: |
-          yes | sdkmanager --licenses
-          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          SM=$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | sort -V | tail -1)
+          if [ -z "$SM" ]; then
+            echo "sdkmanager not found under $ANDROID_HOME" >&2
+            ls -la "$ANDROID_HOME" >&2 || true
+            exit 1
+          fi
+          yes | "$SM" --licenses
+          "$SM" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
       - name: Build debug APK
         run: gradle :app:assembleDebug --no-daemon
