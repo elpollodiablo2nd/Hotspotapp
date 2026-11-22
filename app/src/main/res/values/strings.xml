@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Hotspot Link</string>
+    <string name="channel_name">Hotspot listener</string>
+    <string name="channel_desc">Keeps the Bluetooth hotspot listener alive in the background</string>
+    <string name="notif_title">Hotspot Link</string>
+    <string name="notif_listening">Listening for %1$s</string>
+    <string name="notif_connected">%1$s connected</string>
+    <string name="notif_connected_on">%1$s connected - hotspot ON</string>
+</resources>

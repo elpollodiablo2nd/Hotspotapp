@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hotspot Link</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M0 0h24v3.428H0z' fill='%23FFD800'/%3E%3Cpath d='M0 3.428h3.428v3.428H0zM10.286 3.428h3.428v3.428h-3.428zM20.572 3.428H24v3.428h-3.428z' fill='%23FFD800'/%3E%3Cpath d='M0 6.856h3.428v3.428H0zM10.286 6.856h3.428v3.428h-3.428zM20.572 6.856H24v3.428h-3.428z' fill='%23FFAF00'/%3E%3Cpath d='M3.428 10.258h17.144v3.428H3.428z' fill='%23FF8205'/%3E%3Cpath d='M3.428 13.686h3.429v3.428H3.428zM10.286 13.686h3.429v3.428h-3.429zM17.142 13.686h3.43v3.428h-3.43z' fill='%23FA500F'/%3E%3Cpath d='M0 17.114h10.286v3.428H0zM13.714 17.114H24v3.428h-10.286z' fill='%23E10500'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="pixel-base.css">
+<style>
+    .wrap { max-width: 720px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+    header { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+    header h1 { font-size: 1.5rem; line-height: 1.5; }
+    main.card { display: flex; flex-direction: column; gap: 1rem; }
+    .row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+    .row select { flex: 1 1 220px; min-width: 0; }
+    select.pixel {
+        font-family: 'VT323', monospace;
+        font-size: 1.4rem;
+        padding: 0.5rem 0.75rem;
+        background: #ffffff;
+        color: var(--ink);
+        border: 4px solid var(--ink);
+        box-shadow: inset 4px 4px 0 rgba(0, 0, 0, 0.12);
+        outline: none;
+    }
+    #statusExpr { font-size: 1.5rem; text-align: center; word-break: break-word; }
+    .hint { font-size: 1.15rem; opacity: 0.75; word-break: break-word; }
+    footer { margin-top: 1.25rem; text-align: center; font-size: 1.05rem; opacity: 0.6; }
+    button.small { font-size: 0.55rem; padding: 0.8rem 1rem; }
+    .stat-value.ok { color: var(--m-yellow); }
+    .stat-value.bad { color: var(--m-red); }
+</style>
+</head>
+<body>
+<div class="wrap">
+    <header>
+        <img src="mistral-m.svg" class="logo-m" alt="M">
+        <h1>HOTSPOT<br>LINK</h1>
+        <span class="badge">BT -&gt; AP</span>
+    </header>
+
+    <main class="card">
+        <div class="screen">
+            <div class="expr" id="statusExpr">BOOTING<span class="cursor"></span></div>
+            <div class="stats">
+                <div class="stat-item"><div class="stat-value" id="stDevice">-</div><div class="stat-label">DEVICE</div></div>
+                <div class="stat-item"><div class="stat-value" id="stBt">-</div><div class="stat-label">BT LINK</div></div>
+                <div class="stat-item"><div class="stat-value" id="stAp">-</div><div class="stat-label">HOTSPOT</div></div>
+            </div>
+        </div>
+
+        <div class="feedback" id="feedback"></div>
+
+        <div class="row">
+            <select id="deviceSelect" class="pixel"></select>
+            <button id="saveBtn" class="btn-alt">SAVE</button>
+        </div>
+
+        <div class="row">
+            <button id="startBtn" class="btn-primary">START LISTENING</button>
+            <button id="stopBtn" class="btn-alt">STOP</button>
+        </div>
+
+        <div class="row">
+            <button id="wifiBtn" class="btn-alt small">OPEN WI-FI PANEL</button>
+        </div>
+
+        <p class="hint" id="eventLine">...</p>
+    </main>
+
+    <footer>HOTSPOT ON WHEN THE SAVED BLUETOOTH DEVICE CONNECTS - OFF WHEN IT DISCONNECTS</footer>
+</div>
+
+<script>
+(function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var fbTimer = null;
+
+    function feedback(msg, ok) {
+        var fb = $('feedback');
+        fb.textContent = msg;
+        fb.className = 'feedback visible ' + (ok ? 'correct' : 'wrong');
+        if (fbTimer) clearTimeout(fbTimer);
+        fbTimer = setTimeout(function () { fb.className = 'feedback'; }, 4000);
+    }
+
+    function loadDevices() {
+        var arr = [];
+        try { arr = JSON.parse(PixelBridge.pairedDevicesJson() || '[]'); } catch (e) { arr = []; }
+        var sel = $('deviceSelect');
+        sel.innerHTML = '';
+        if (!arr.length) {
+            var opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = '(no paired devices / grant BT permission)';
+            sel.appendChild(opt);
+            return;
+        }
+        arr.forEach(function (d) {
+            var o = document.createElement('option');
+            o.value = d.address;
+            o.textContent = d.name + '  [' + d.address + ']';
+            sel.appendChild(o);
+        });
+        var saved = null;
+        try { saved = JSON.parse(PixelBridge.savedDeviceJson() || 'null'); } catch (e) { saved = null; }
+        if (saved && saved.address) {
+            for (var i = 0; i < sel.options.length; i++) {
+                if (sel.options[i].value === saved.address) { sel.selectedIndex = i; break; }
+            }
+        }
+    }
+
+    function render(s) {
+        var dev = $('stDevice'), bt = $('stBt'), ap = $('stAp');
+        dev.textContent = s.targetName ? String(s.targetName).toUpperCase().slice(0, 12) : 'NONE';
+        dev.className = 'stat-value' + (s.targetName ? ' ok' : ' bad');
+        bt.textContent = !s.btEnabled ? 'OFF' : (s.deviceConnected ? 'LINKED' : 'IDLE');
+        bt.className = 'stat-value' + (s.deviceConnected ? ' ok' : '');
+        ap.textContent = s.hotspotOn ? 'ON' : 'OFF';
+        ap.className = 'stat-value' + (s.hotspotOn ? ' ok' : ' bad');
+        var expr = $('statusExpr');
+        if (!s.listening) expr.innerHTML = 'STANDBY<span class="cursor"></span>';
+        else if (s.deviceConnected && s.hotspotOn) expr.innerHTML = 'HOTSPOT ON<span class="cursor"></span>';
+        else if (s.deviceConnected) expr.innerHTML = 'BT LINKED<span class="cursor"></span>';
+        else expr.innerHTML = 'WAITING BT<span class="cursor"></span>';
+        var line = s.lastEvent || '';
+        if (s.ssid) line += ' | SSID: ' + s.ssid;
+        if (s.error) line += ' | ERR: ' + s.error;
+        $('eventLine').textContent = line;
+        $('startBtn').disabled = !!s.listening;
+        $('stopBtn').disabled = !s.listening;
+    }
+
+    window.refreshStatus = function () {
+        try { render(JSON.parse(PixelBridge.statusJson())); } catch (e) {}
+    };
+
+    $('saveBtn').addEventListener('click', function () {
+        var sel = $('deviceSelect');
+        if (!sel.value) { feedback('PICK A DEVICE FIRST', false); return; }
+        PixelBridge.saveDevice(sel.value, sel.options[sel.selectedIndex].text);
+        feedback('DEVICE SAVED', true);
+        window.refreshStatus();
+    });
+
+    $('startBtn').addEventListener('click', function () {
+        var saved = null;
+        try { saved = JSON.parse(PixelBridge.savedDeviceJson() || 'null'); } catch (e) { saved = null; }
+        if (!saved || !saved.address) { feedback('SAVE A DEVICE FIRST', false); return; }
+        PixelBridge.startListening();
+        feedback('LISTENING STARTED', true);
+        setTimeout(window.refreshStatus, 500);
+    });
+
+    $('stopBtn').addEventListener('click', function () {
+        PixelBridge.stopListening();
+        feedback('STOPPED', true);
+        setTimeout(window.refreshStatus, 300);
+    });
+
+    $('wifiBtn').addEventListener('click', function () { PixelBridge.openWifiPanel(); });
+
+    loadDevices();
+    window.refreshStatus();
+    setInterval(window.refreshStatus, 1200);
+})();
+</script>
+</body>
+</html>
