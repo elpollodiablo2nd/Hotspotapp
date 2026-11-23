@@ -53,7 +53,7 @@ class PixelBridge(private val activity: MainActivity) {
 
     @JavascriptInterface
     fun saveHotspotConfig(ssid: String, passphrase: String) {
-        Prefs.setHotspotConfig(app, ssid.trim(), passphrase)
+        Prefs.setHotspotConfig(app, ssid.trim(), passphrase, custom = true)
     }
 
     @JavascriptInterface

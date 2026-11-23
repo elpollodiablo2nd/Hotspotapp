@@ -43,25 +43,45 @@ object HotspotController {
             return true
         }
         lastError = null
+        val errors = mutableListOf<String>()
+        if (Prefs.apCustom(context)) {
+            val ssid = Prefs.hotspotSsid(context)
+            if (!ssid.isNullOrEmpty()) {
+                try {
+                    startLocalOnlyWithConfig(context, ssid, Prefs.hotspotPassphrase(context) ?: "")
+                    return true
+                } catch (e: Exception) {
+                    errors += "custom AP: ${e.message ?: e.javaClass.simpleName}"
+                    Log.w(TAG, "custom AP start failed", e)
+                }
+            }
+        }
+        try {
+            if (startWithSystemConfig(context)) return true
+        } catch (e: Exception) {
+            errors += "system AP config: ${e.message ?: e.javaClass.simpleName}"
+            Log.w(TAG, "system AP config start failed", e)
+        }
         val (ssid, passphrase) = ensureApConfig(context)
         try {
             startLocalOnlyWithConfig(context, ssid, passphrase)
             return true
         } catch (e: Exception) {
-            Log.w(TAG, "configured local-only hotspot failed, falling back to default", e)
-            lastError = "custom AP config failed: ${e.message ?: e.javaClass.simpleName}"
+            errors += "generated AP: ${e.message ?: e.javaClass.simpleName}"
+            Log.w(TAG, "generated AP start failed", e)
         }
         return try {
             startLocalOnlyDefault(context)
+            lastError = null
             true
         } catch (e: Exception) {
-            Log.w(TAG, "local-only hotspot failed, trying legacy AP toggle", e)
+            Log.w(TAG, "default local-only hotspot failed, trying legacy AP toggle", e)
             if (setApEnabledLegacy(context, true)) {
                 AppState.hotspotOn = true
                 true
             } else {
                 AppState.hotspotOn = false
-                lastError = "hotspot start failed (${e.message ?: e.javaClass.simpleName})"
+                lastError = "hotspot start failed (${errors.joinToString("; ")})"
                 false
             }
         }
@@ -89,7 +109,7 @@ object HotspotController {
             return saved to (Prefs.hotspotPassphrase(context) ?: "")
         }
         val generated = generateApConfig()
-        Prefs.setHotspotConfig(context, generated.first, generated.second)
+        Prefs.setHotspotConfig(context, generated.first, generated.second, custom = false)
         return generated
     }
 
@@ -120,16 +140,51 @@ object HotspotController {
         wm.startLocalOnlyHotspot(callback, Handler(Looper.getMainLooper()))
     }
 
-    private fun startLocalOnlyWithConfig(context: Context, ssid: String, passphrase: String) {
+    private fun startWithSystemConfig(context: Context): Boolean {
         val wm = wifiManager(context)
-        val configClass = Class.forName("android.net.wifi.SoftApConfiguration")
+        val config = wm.javaClass.getMethod("getSoftApConfiguration").invoke(wm) ?: return false
+        startWithExistingConfig(context, config)
+        return true
+    }
+
+    private fun startLocalOnlyWithConfig(context: Context, ssid: String, passphrase: String) {
         val builderClass = Class.forName("android.net.wifi.SoftApConfiguration\$Builder")
         val builder = builderClass.getConstructor().newInstance()
         builderClass.getMethod("setSsid", String::class.java).invoke(builder, ssid)
-        if (passphrase.length >= 8) {
-            builderClass.getMethod("setPassphrase", String::class.java).invoke(builder, passphrase)
+        if (passphrase.isNotEmpty()) {
+            var passSet = false
+            for (method in builderClass.methods.filter { it.name == "setPassphrase" }) {
+                try {
+                    when (method.parameterCount) {
+                        1 -> {
+                            method.invoke(builder, passphrase)
+                            passSet = true
+                        }
+                        2 -> {
+                            val securityType = try {
+                                Class.forName("android.net.wifi.SoftApConfiguration")
+                                    .getField("SECURITY_TYPE_WPA2_PSK").getInt(null)
+                            } catch (e: Exception) {
+                                1
+                            }
+                            method.invoke(builder, passphrase, securityType)
+                            passSet = true
+                        }
+                    }
+                    if (passSet) break
+                } catch (e: Exception) {
+                    Log.w(TAG, "setPassphrase variant blocked: ${method.parameterTypes.joinToString(",")}", e)
+                }
+            }
+            if (!passSet) Log.w(TAG, "no setPassphrase variant worked, continuing SSID-only")
         }
         val config = builderClass.getMethod("build").invoke(builder)
+        startWithExistingConfig(context, config)
+    }
+
+    private fun startWithExistingConfig(context: Context, config: Any) {
+        val wm = wifiManager(context)
+        val configClass = Class.forName("android.net.wifi.SoftApConfiguration")
         val executor = Executor { command -> Handler(Looper.getMainLooper()).post(command) }
         val method = wm.javaClass.getMethod(
             "startLocalOnlyHotspot",
