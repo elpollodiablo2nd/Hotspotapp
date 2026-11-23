@@ -108,6 +108,7 @@ class PixelBridge(private val activity: MainActivity) {
         status.put("hotspotOn", AppState.hotspotOn || HotspotController.isOn(app))
         status.put("ssid", HotspotController.lastSsid ?: "")
         status.put("passphrase", HotspotController.lastPassphrase ?: "")
+        status.put("mode", HotspotController.lastMode ?: "")
         status.put("apSsid", Prefs.hotspotSsid(app) ?: "")
         status.put("apPass", Prefs.hotspotPassphrase(app) ?: "")
         status.put("btEnabled", isBluetoothEnabled())

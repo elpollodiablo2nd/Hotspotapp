@@ -136,7 +136,7 @@
         else if (s.deviceConnected) expr.innerHTML = 'BT LINKED<span class="cursor"></span>';
         else expr.innerHTML = 'WAITING BT<span class="cursor"></span>';
         var ap = $('apLine');
-        if (s.hotspotOn && s.ssid) ap.textContent = 'AP: ' + s.ssid + (s.passphrase ? '  PASS: ' + s.passphrase : '');
+        if (s.hotspotOn && s.ssid) ap.textContent = 'AP: ' + s.ssid + (s.passphrase ? '  PASS: ' + s.passphrase : '') + (s.mode === 'local-only' ? '  [LOCAL-ONLY: NO INTERNET]' : '');
         else if (s.apSsid) ap.textContent = 'AP CFG: ' + s.apSsid + (s.apPass ? '  PASS: ' + s.apPass : '');
         else ap.textContent = 'AP: -';
         var line = s.lastEvent || '';

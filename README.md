@@ -22,14 +22,17 @@ gradient title, pixel M logo, chunky borders, CRT scanlines).
 Google only lets **system apps** toggle the full internet-sharing hotspot
 (`TETHER_PRIVILEGED`). For normal apps the reliable public path is
 `WifiManager.startLocalOnlyHotspot(...)`, which this app uses as the primary mechanism.
-The hotspot always uses the **same SSID and password on every activation**: on first
-start the app generates a random pair once, persists it, and reuses it (shown in the UI
-and in the SET AP fields). You can override with the **SET AP** fields (prefilled from
-the system hotspot config when the device allows reading it); the app then starts the
-hotspot with that exact SSID/passphrase via the (hidden) configured
-`startLocalOnlyHotspot` overload, falling back to a fresh random one only if the device
-blocks the configured call. The live SSID/password are read back from the hotspot
-reservation and shown in the UI whenever it activates.
+The hotspot always uses the **same SSID and password on every activation**. Start order:
+1. **SET AP** values if you set them (hidden `SoftApConfiguration.Builder`, every
+   `setPassphrase` variant tried defensively);
+2. otherwise the **system hotspot's own SoftApConfiguration object** passed straight to
+   the hidden configured `startLocalOnlyHotspot` overload — i.e. the same name/password as
+   your configured system hotspot;
+3. otherwise a random pair generated once, persisted, and reused;
+4. last resort: the public default `startLocalOnlyHotspot(callback, handler)` (fresh random
+   credentials) if the device blocks all configured calls.
+The live SSID/password are read back from the hotspot reservation and shown in the UI
+whenever it activates.
 A legacy `setWifiApEnabled` reflection fallback is attempted as best effort on OEM builds
 where it still works. The UI also offers an **OPEN WI-FI PANEL** button
 (`Settings.Panel.ACTION_INTERNET_CONNECTIVITY`) to toggle the full hotspot manually.
