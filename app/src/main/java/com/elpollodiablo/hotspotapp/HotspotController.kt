@@ -15,6 +15,9 @@ import java.util.concurrent.Executor
 object HotspotController {
     private const val TAG = "HotspotController"
 
+    private const val TETHERING_WIFI = 0
+    private const val TETHER_ERROR_NO_ERROR = 0
+
     @Volatile
     private var reservation: WifiManager.LocalOnlyHotspotReservation? = null
 
@@ -71,7 +74,7 @@ object HotspotController {
         try {
             val cm = context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
             cm.javaClass.getMethod("stopTethering", Int::class.javaPrimitiveType)
-                .invoke(cm, ConnectivityManager.TETHERING_WIFI)
+                .invoke(cm, TETHERING_WIFI)
         } catch (e: Exception) {
             Log.w(TAG, "stopTethering failed", e)
         }
@@ -105,7 +108,7 @@ object HotspotController {
             )
             val receiver = object : ResultReceiver(Handler(Looper.getMainLooper())) {
                 override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
-                    if (resultCode == ConnectivityManager.TETHER_ERROR_NO_ERROR) {
+                    if (resultCode == TETHER_ERROR_NO_ERROR) {
                         lastMode = "tethered"
                         AppState.hotspotOn = true
                         AppState.setEvent("tethered hotspot ON (internet shared)")
@@ -116,7 +119,7 @@ object HotspotController {
                     }
                 }
             }
-            method.invoke(cm, ConnectivityManager.TETHERING_WIFI, false, receiver, Handler(Looper.getMainLooper()))
+            method.invoke(cm, TETHERING_WIFI, false, receiver, Handler(Looper.getMainLooper()))
             true
         } catch (e: Exception) {
             Log.w(TAG, "startTethering reflection failed", e)

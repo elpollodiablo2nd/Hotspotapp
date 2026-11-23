@@ -37,6 +37,18 @@ A legacy `setWifiApEnabled` reflection fallback is attempted as best effort on O
 where it still works. The UI also offers an **OPEN WI-FI PANEL** button
 (`Settings.Panel.ACTION_INTERNET_CONNECTIVITY`) to toggle the full hotspot manually.
 
+**Why connected devices report "no internet":** on Android 13+ every API that starts the
+full internet-sharing hotspot (`ConnectivityManager.startTethering`,
+`TetheringManager.startTetheredHotspot`, `setWifiApEnabled`) requires `TETHER_PRIVILEGED`,
+a system-app-only permission (Android 16 blocks the reflection workaround entirely). The
+app therefore first *tries* `startTethering(TETHERING_WIFI)` best-effort (works on some
+OEM/system-signed builds — the UI then shows `tethered hotspot ON (internet shared)`), and
+otherwise starts a **local-only** hotspot, which gives clients a Wi-Fi link to the phone but
+no internet routing — the UI marks this as `[LOCAL-ONLY: NO INTERNET]`. For the car/Android
+Auto use case the local-only link is usually enough (the phone keeps its own mobile data);
+if the client device itself needs internet, enable the system hotspot manually via
+**OPEN WI-FI PANEL**.
+
 ## Permissions
 
 | Permission | Why |
